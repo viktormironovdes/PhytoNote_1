@@ -115,33 +115,22 @@ jobs:
           echo "✅ All permissions added to AndroidManifest.xml"
         fi
 
-    - name: Restore or create keystore
+    - name: Create keystore in correct location
       run: |
-        if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
-          echo "🔐 Restoring keystore from secrets..."
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > phytonote.keystore
-          echo "✅ Keystore restored"
-        else
-          echo "⚠️ No keystore in secrets, creating new one..."
-          keytool -genkey -v \
-            -keystore phytonote.keystore \
-            -alias phytonote \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -storepass phytonote123 \
-            -keypass phytonote123 \
-            -dname "CN=PhytoNote, OU=App, O=PhytoNote, L=City, S=State, C=US"
-        fi
+        echo "🔐 Creating keystore..."
+        keytool -genkey -v \
+          -keystore phytonote.keystore \
+          -alias phytonote \
+          -keyalg RSA \
+          -keysize 2048 \
+          -validity 10000 \
+          -storepass phytonote123 \
+          -keypass phytonote123 \
+          -dname "CN=PhytoNote, OU=App, O=PhytoNote, L=City, S=State, C=US"
+        echo "✅ Keystore created at: $(pwd)/phytonote.keystore"
+        ls -la phytonote.keystore
 
-    - name: Save keystore as artifact (first time only)
-      run: |
-        if [ -f "phytonote.keystore" ]; then
-          cp phytonote.keystore phytonote-backup.keystore
-        fi
-      continue-on-error: true
-
-    - name: Fix build.gradle with correct configuration
+    - name: Fix build.gradle with correct keystore path
       run: |
         GRADLE_PATH="android/app/build.gradle"
         
@@ -163,7 +152,7 @@ jobs:
             }
             signingConfigs {
                 release {
-                    storeFile file("../../../phytonote.keystore")
+                    storeFile file("../../phytonote.keystore")
                     storePassword "phytonote123"
                     keyAlias "phytonote"
                     keyPassword "phytonote123"
@@ -225,9 +214,9 @@ jobs:
         path: android/app/build/outputs/apk/release/app-release.apk
         retention-days: 7
 
-    - name: Upload keystore backup (first time only)
+    - name: Upload keystore backup
       uses: actions/upload-artifact@v4
       with:
         name: phytonote-keystore-backup
-        path: phytonote-backup.keystore
+        path: phytonote.keystore
         retention-days: 7
