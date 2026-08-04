@@ -141,7 +141,7 @@ jobs:
         fi
       continue-on-error: true
 
-    - name: Fix build.gradle with signing config
+    - name: Fix build.gradle with correct configuration
       run: |
         GRADLE_PATH="android/app/build.gradle"
         
@@ -189,6 +189,7 @@ jobs:
             implementation "androidx.appcompat:appcompat:1.6.1"
             implementation "com.google.android.material:material:1.9.0"
             implementation "androidx.constraintlayout:constraintlayout:2.1.4"
+            implementation "androidx.core:core-splashscreen:1.0.1"
             implementation project(':capacitor-android')
             implementation project(':capacitor-cordova-android-plugins')
         }
