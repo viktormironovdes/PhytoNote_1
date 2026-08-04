@@ -92,43 +92,30 @@ jobs:
         if [ -f "$MANIFEST_PATH" ]; then
           echo "📝 Adding storage permissions to AndroidManifest.xml..."
           
-          # Проверяем, есть ли уже разрешения, чтобы не дублировать
           if ! grep -q "WRITE_EXTERNAL_STORAGE" "$MANIFEST_PATH"; then
             sed -i '/<manifest/a \    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />' "$MANIFEST_PATH"
-            echo "✅ WRITE_EXTERNAL_STORAGE added"
           fi
           
           if ! grep -q "READ_EXTERNAL_STORAGE" "$MANIFEST_PATH"; then
             sed -i '/<manifest/a \    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />' "$MANIFEST_PATH"
-            echo "✅ READ_EXTERNAL_STORAGE added"
           fi
           
-          # Для Android 13+ добавляем разрешения для медиафайлов
           if ! grep -q "READ_MEDIA_IMAGES" "$MANIFEST_PATH"; then
             sed -i '/<manifest/a \    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />' "$MANIFEST_PATH"
-            echo "✅ READ_MEDIA_IMAGES added"
           fi
           
           if ! grep -q "READ_MEDIA_AUDIO" "$MANIFEST_PATH"; then
             sed -i '/<manifest/a \    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />' "$MANIFEST_PATH"
-            echo "✅ READ_MEDIA_AUDIO added"
           fi
           
           if ! grep -q "READ_MEDIA_VIDEO" "$MANIFEST_PATH"; then
             sed -i '/<manifest/a \    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />' "$MANIFEST_PATH"
-            echo "✅ READ_MEDIA_VIDEO added"
           fi
           
           echo "✅ All permissions added to AndroidManifest.xml"
-          
-          # Показываем содержимое манифеста для проверки
-          echo "📄 AndroidManifest.xml content:"
-          cat "$MANIFEST_PATH"
-        else
-          echo "❌ AndroidManifest.xml not found!"
         fi
 
-    - name: Restore keystore from secrets
+    - name: Restore or create keystore
       run: |
         if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
           echo "🔐 Restoring keystore from secrets..."
@@ -147,19 +134,74 @@ jobs:
             -dname "CN=PhytoNote, OU=App, O=PhytoNote, L=City, S=State, C=US"
         fi
 
-    - name: Save keystore as artifact (for first time only)
+    - name: Save keystore as artifact (first time only)
       run: |
         if [ -f "phytonote.keystore" ]; then
-          echo "🔑 Saving keystore to artifacts for backup..."
           cp phytonote.keystore phytonote-backup.keystore
         fi
       continue-on-error: true
 
-    - name: Update versionCode
+    - name: Fix build.gradle with signing config
+      run: |
+        GRADLE_PATH="android/app/build.gradle"
+        
+        echo "📝 Overwriting build.gradle with correct configuration..."
+        
+        cat > $GRADLE_PATH << 'EOF'
+        apply plugin: 'com.android.application'
+
+        android {
+            namespace "com.phytonote.app"
+            compileSdkVersion 34
+            defaultConfig {
+                applicationId "com.phytonote.app"
+                minSdkVersion 23
+                targetSdkVersion 34
+                versionCode 1
+                versionName "1.0.0"
+                testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+            }
+            signingConfigs {
+                release {
+                    storeFile file("../../../phytonote.keystore")
+                    storePassword "phytonote123"
+                    keyAlias "phytonote"
+                    keyPassword "phytonote123"
+                }
+            }
+            buildTypes {
+                release {
+                    signingConfig signingConfigs.release
+                    minifyEnabled false
+                    proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+                }
+            }
+        }
+
+        repositories {
+            flatDir {
+                dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+            }
+        }
+
+        dependencies {
+            implementation fileTree(include: ['*.jar'], dir: 'libs')
+            implementation "androidx.appcompat:appcompat:1.6.1"
+            implementation "com.google.android.material:material:1.9.0"
+            implementation "androidx.constraintlayout:constraintlayout:2.1.4"
+            implementation project(':capacitor-android')
+            implementation project(':capacitor-cordova-android-plugins')
+        }
+
+        apply from: 'capacitor.build.gradle'
+        EOF
+        
+        echo "✅ build.gradle overwritten successfully!"
+
+    - name: Update versionCode in build.gradle
       run: |
         GRADLE_PATH="android/app/build.gradle"
         if [ -f "$GRADLE_PATH" ]; then
-          # Увеличиваем versionCode при каждой сборке
           CURRENT_VERSION=$(grep -o 'versionCode [0-9]*' "$GRADLE_PATH" | awk '{print $2}')
           if [ -z "$CURRENT_VERSION" ]; then
             CURRENT_VERSION=1
@@ -167,20 +209,6 @@ jobs:
           NEW_VERSION=$((CURRENT_VERSION + 1))
           sed -i "s/versionCode [0-9]*/versionCode $NEW_VERSION/" "$GRADLE_PATH"
           echo "✅ Version updated: versionCode=$NEW_VERSION"
-        fi
-
-    - name: Configure signing in gradle
-      run: |
-        GRADLE_PATH="android/app/build.gradle"
-        if [ -f "$GRADLE_PATH" ]; then
-          # Проверяем, есть ли уже signingConfigs
-          if ! grep -q "signingConfigs" "$GRADLE_PATH"; then
-            # Добавляем signingConfigs
-            sed -i '/android {/a \    signingConfigs {\n        release {\n            storeFile file("../../../phytonote.keystore")\n            storePassword "phytonote123"\n            keyAlias "phytonote"\n            keyPassword "phytonote123"\n        }\n    }' "$GRADLE_PATH"
-            
-            # Добавляем signingConfig в release
-            sed -i '/release {/a \            signingConfig signingConfigs.release' "$GRADLE_PATH"
-          fi
         fi
 
     - name: Build Release APK
