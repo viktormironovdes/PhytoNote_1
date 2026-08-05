@@ -21,7 +21,7 @@ jobs:
       uses: actions/setup-java@v4
       with:
         distribution: 'zulu'
-        java-version: '21'                        # ← БЫЛО 17, СТАЛО 21
+        java-version: '21'
 
     - name: Create Capacitor project
       run: |
@@ -142,11 +142,11 @@ jobs:
 
         android {
             namespace "com.phytonote.app"
-            compileSdkVersion 34
+            compileSdk 36
             defaultConfig {
                 applicationId "com.phytonote.app"
                 minSdkVersion 23
-                targetSdkVersion 34
+                targetSdkVersion 36
                 versionCode 1
                 versionName "1.0.0"
                 testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
