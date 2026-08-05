@@ -131,22 +131,22 @@ jobs:
         echo "✅ Keystore created at: $(pwd)/phytonote.keystore"
         ls -la phytonote.keystore
 
-    - name: Fix build.gradle with correct configuration
+    - name: Fix build.gradle with correct configuration (Android 15)
       run: |
         GRADLE_PATH="android/app/build.gradle"
         
-        echo "📝 Overwriting build.gradle with correct configuration..."
+        echo "📝 Overwriting build.gradle with correct configuration for Android 15 (API 35)..."
         
         cat > $GRADLE_PATH << 'EOF'
         apply plugin: 'com.android.application'
 
         android {
             namespace "com.phytonote.app"
-            compileSdk 36
+            compileSdk 35
             defaultConfig {
                 applicationId "com.phytonote.app"
-                minSdkVersion 23
-                targetSdkVersion 36
+                minSdkVersion 24
+                targetSdkVersion 35
                 versionCode 1
                 versionName "1.0.0"
                 testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
