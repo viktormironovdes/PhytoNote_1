@@ -5,9 +5,18 @@
 // Импортируем Capacitor Filesystem (если доступен)
 let CapacitorFilesystem = null;
 let FileSharer = null;
+let FileSave = null;
 
 try {
     if (window.Capacitor && window.Capacitor.isNativePlatform()) {
+        // Нативный плагин FileSave
+        FileSave = window.Capacitor.Plugins.FileSave;
+        if (FileSave) {
+            console.log('✅ FileSave plugin loaded');
+        } else {
+            console.log('⚠️ FileSave plugin not available');
+        }
+        
         import('@capacitor/filesystem').then(module => {
             CapacitorFilesystem = module.Filesystem;
             console.log('✅ Capacitor Filesystem loaded');
@@ -144,7 +153,7 @@ function saveDisplaySettings() {
 }
 
 // ================================================================
-// ЭКСПОРТ КОЛЛЕКЦИЙ (С НАТИВНЫМ ДИАЛОГОМ ANDROID)
+// ЭКСПОРТ КОЛЛЕКЦИЙ (С NATIVE ANDROID DIALOG)
 // ================================================================
 
 function showExportBaseModal() {
@@ -166,46 +175,37 @@ async function executeExportBase() {
     const data = { base, flowers, exportedAt: new Date().toISOString() };
     const jsonString = JSON.stringify(data, null, 2);
     const fileName = `collection_${base.name}_${new Date().toISOString().split('T')[0]}.json`;
+    const base64Data = btoa(unescape(encodeURIComponent(jsonString)));
 
     try {
-        // === ПРАВИЛЬНЫЙ СПОСОБ: Web Share API с файлом ===
-        // Это открывает НАТИВНОЕ ОКНО Android "Сохранить в..."
-        if (window.navigator && window.navigator.share) {
-            console.log('📱 Используем Web Share API для нативного диалога Android');
+        // === СПОСОБ 1: Нативный плагин FileSave (ACTION_CREATE_DOCUMENT) ===
+        if (FileSave && window.Capacitor && window.Capacitor.isNativePlatform()) {
+            console.log('📱 Используем нативный FileSave плагин (с диалогом)');
             
-            // Создаём файл из JSON
-            const file = new File([jsonString], fileName, {
-                type: 'application/json'
+            const result = await FileSave.saveFile({
+                fileName: fileName,
+                base64Data: base64Data,
+                mimeType: 'application/json'
             });
             
-            // Открываем нативное окно "Поделиться" Android
-            // В Android это окно позволяет выбрать "Сохранить в файлы" или другое приложение
-            await window.navigator.share({
-                title: 'Экспорт коллекции',
-                text: `Коллекция "${base.name}" (${flowers.length} растений)`,
-                files: [file]
-            });
-            
-            console.log('✅ Диалог Android открыт');
-            alert(`✅ Коллекция экспортирована!`);
+            console.log('✅ Файл сохранён:', result);
+            alert(`✅ Коллекция экспортирована через системное окно!`);
         } 
-        // === ЗАПАСНОЙ СПОСОБ: FileSharer.share() ===
+        // === СПОСОБ 2: FileSharer (запасной) ===
         else if (FileSharer && window.Capacitor && window.Capacitor.isNativePlatform()) {
-            console.log('📱 Используем FileSharer.share() как запасной вариант');
-            
-            const base64Data = btoa(unescape(encodeURIComponent(jsonString)));
-            
-            await FileSharer.share({
+            console.log('📱 Используем FileSharer');
+            await FileSharer.save({
                 filename: fileName,
                 contentType: 'application/json',
                 base64Data: base64Data,
-                title: 'Экспорт коллекции',
-                text: `Коллекция "${base.name}" (${flowers.length} растений)`
+                android: {
+                    saveDirectory: 'downloads',
+                    relativePath: 'PhytoNote'
+                }
             });
-            
-            alert(`✅ Коллекция экспортирована!`);
+            alert(`✅ Коллекция экспортирована!\n📁 Папка: Загрузки/PhytoNote\n📄 Файл: ${fileName}`);
         }
-        // === БРАУЗЕРНОЕ СКАЧИВАНИЕ (ПК) ===
+        // === СПОСОБ 3: Браузерное скачивание (ПК) ===
         else {
             console.log('💻 Используем браузерное скачивание');
             const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8' });
@@ -221,13 +221,6 @@ async function executeExportBase() {
         }
     } catch (error) {
         console.error('❌ Ошибка экспорта:', error);
-        
-        // Если пользователь отменил диалог
-        if (error.message && (error.message.includes('cancel') || error.message.includes('USER_CANCELLED'))) {
-            console.log('ℹ️ Пользователь отменил диалог');
-            return;
-        }
-        
         alert(`❌ Ошибка при экспорте: ${error.message || error}`);
     }
     
@@ -283,31 +276,27 @@ async function exportAllData() {
     const data = { bases: state.bases, flowers: state.flowers, user: state.user };
     const jsonString = JSON.stringify(data, null, 2);
     const fileName = `all_data_${new Date().toISOString().split('T')[0]}.json`;
+    const base64Data = btoa(unescape(encodeURIComponent(jsonString)));
 
     try {
-        // Web Share API с файлом — открывает нативное окно Android
-        if (window.navigator && window.navigator.share) {
-            const file = new File([jsonString], fileName, {
-                type: 'application/json'
+        if (FileSave && window.Capacitor && window.Capacitor.isNativePlatform()) {
+            await FileSave.saveFile({
+                fileName: fileName,
+                base64Data: base64Data,
+                mimeType: 'application/json'
             });
-            
-            await window.navigator.share({
-                title: 'Экспорт всех данных',
-                text: `Все данные PhytoNote (${state.flowers.length} растений)`,
-                files: [file]
-            });
-            
-            alert(`✅ Все данные экспортированы!`);
+            alert(`✅ Все данные экспортированы через системное окно!`);
         } else if (FileSharer && window.Capacitor && window.Capacitor.isNativePlatform()) {
-            const base64Data = btoa(unescape(encodeURIComponent(jsonString)));
-            await FileSharer.share({
+            await FileSharer.save({
                 filename: fileName,
                 contentType: 'application/json',
                 base64Data: base64Data,
-                title: 'Экспорт всех данных',
-                text: `Все данные PhytoNote (${state.flowers.length} растений)`
+                android: {
+                    saveDirectory: 'downloads',
+                    relativePath: 'PhytoNote'
+                }
             });
-            alert(`✅ Все данные экспортированы!`);
+            alert(`✅ Все данные экспортированы!\n📁 Папка: Загрузки/PhytoNote\n📄 Файл: ${fileName}`);
         } else {
             const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8' });
             const url = URL.createObjectURL(blob);
@@ -321,10 +310,6 @@ async function exportAllData() {
             alert(`✅ Все данные экспортированы!\n📄 Файл: ${fileName}`);
         }
     } catch (error) {
-        if (error.message && (error.message.includes('cancel') || error.message.includes('USER_CANCELLED'))) {
-            console.log('ℹ️ Пользователь отменил диалог');
-            return;
-        }
         alert(`❌ Ошибка при экспорте: ${error.message || error}`);
     }
 }
@@ -389,30 +374,27 @@ async function exportLogs() {
     }
     const jsonString = JSON.stringify(logs, null, 2);
     const fileName = `phytonote_logs_${new Date().toISOString().split('T')[0]}.json`;
+    const base64Data = btoa(unescape(encodeURIComponent(jsonString)));
 
     try {
-        if (window.navigator && window.navigator.share) {
-            const file = new File([jsonString], fileName, {
-                type: 'application/json'
+        if (FileSave && window.Capacitor && window.Capacitor.isNativePlatform()) {
+            await FileSave.saveFile({
+                fileName: fileName,
+                base64Data: base64Data,
+                mimeType: 'application/json'
             });
-            
-            await window.navigator.share({
-                title: 'Экспорт логов',
-                text: 'Логи PhytoNote',
-                files: [file]
-            });
-            
-            alert(`✅ Логи экспортированы!`);
+            alert(`✅ Логи экспортированы через системное окно!`);
         } else if (FileSharer && window.Capacitor && window.Capacitor.isNativePlatform()) {
-            const base64Data = btoa(unescape(encodeURIComponent(jsonString)));
-            await FileSharer.share({
+            await FileSharer.save({
                 filename: fileName,
                 contentType: 'application/json',
                 base64Data: base64Data,
-                title: 'Экспорт логов',
-                text: 'Логи PhytoNote'
+                android: {
+                    saveDirectory: 'downloads',
+                    relativePath: 'PhytoNote'
+                }
             });
-            alert(`✅ Логи экспортированы!`);
+            alert(`✅ Логи экспортированы!\n📁 Папка: Загрузки/PhytoNote\n📄 Файл: ${fileName}`);
         } else {
             const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8' });
             const url = URL.createObjectURL(blob);
@@ -426,10 +408,6 @@ async function exportLogs() {
             alert(`✅ Логи экспортированы!\n📄 Файл: ${fileName}`);
         }
     } catch (error) {
-        if (error.message && (error.message.includes('cancel') || error.message.includes('USER_CANCELLED'))) {
-            console.log('ℹ️ Пользователь отменил диалог');
-            return;
-        }
         alert(`❌ Ошибка при экспорте: ${error.message || error}`);
     }
 }
